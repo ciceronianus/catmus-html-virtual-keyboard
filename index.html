@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CATMuS Transcription Pad</title>
+  <link href="https://fonts.googleapis.com/css2?family=Junicode:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: sans-serif; max-width: 900px; margin: 20px auto; padding: 0 15px; background: #fafafa; color: #333; }
+    h2 { font-size: 1.1rem; margin: 0 0 8px 0; color: #444; }
+    textarea { width: 100%; height: 85px; font-family: 'Junicode', serif; font-size: 1.6rem; padding: 10px; margin-bottom: 8px; border: 1px solid #ccc; border-radius: 6px; resize: vertical; box-sizing: border-box; }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    
+    /* Button Wrapper with Relative Positioning for Tooltip */
+    .btn-wrapper { position: relative; display: inline-block; }
+
+    /* Strict Uniform Button Sizing */
+    button { 
+      font-family: 'Junicode', serif; 
+      font-size: 1.3rem; 
+      min-width: 46px; 
+      height: 46px; 
+      padding: 0 6px; 
+      cursor: pointer; 
+      border: 1px solid #bbb; 
+      background: #fff; 
+      border-radius: 5px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      box-sizing: border-box;
+      position: relative;
+    }
+    button:hover { background: #eef4fc; border-color: #0066cc; }
+
+    /* (?) Indicator Badge */
+    .help-badge {
+      position: absolute;
+      top: 2px;
+      right: 3px;
+      font-family: sans-serif;
+      font-size: 0.6rem;
+      font-weight: bold;
+      color: #0066cc;
+      pointer-events: none;
+    }
+
+    /* CSS Tooltip Popup */
+    .tooltip-text {
+      visibility: hidden;
+      width: 180px;
+      background-color: #222;
+      color: #fff;
+      text-align: center;
+      border-radius: 4px;
+      padding: 6px 8px;
+      position: absolute;
+      z-index: 10;
+      bottom: 115%;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: sans-serif;
+      font-size: 0.75rem;
+      line-height: 1.2;
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+
+    .btn-wrapper:hover .tooltip-text {
+      visibility: visible;
+      opacity: 1;
+    }
+
+    .section { background: #fff; padding: 12px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 12px; }
+    .grid { display: flex; flex-wrap: wrap; gap: 6px; }
+    .pair-group { display: flex; flex-direction: column; gap: 6px; }
+    
+    .action-btn { font-family: sans-serif; font-size: 0.85rem; height: 34px; padding: 0 14px; background: #0066cc; color: #fff; border: none; border-radius: 4px; min-width: auto; }
+    .action-btn:hover { background: #0055b3; }
+    .clear-btn { background: #e0e0e0; color: #333; }
+    .clear-btn:hover { background: #d0d0d0; }
+
+    #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #222; color: #fff; padding: 8px 16px; border-radius: 4px; font-size: 0.9rem; display: none; }
+  </style>
+</head>
+<body>
+
+  <h2>CATMuS Transcription Pad</h2>
+  
+  <textarea id="output" placeholder="Type or click characters..."></textarea>
+  <div class="toolbar">
+    <label style="font-size: 0.9rem;"><input type="checkbox" id="directCopy"> Copy single character on click</label>
+    <div>
+      <button class="action-btn clear-btn" onclick="document.getElementById('output').value='';">Clear</button>
+      <button class="action-btn" onclick="navigator.clipboard.writeText(document.getElementById('output').value); showToast('Line copied!');">Copy Line</button>
+    </div>
+  </div>
+
+  <!-- Modifiers & Combining Marks -->
+  <div class="section">
+    <h2>Modifiers & Combining Diacritics</h2>
+    <div class="grid" id="mods"></div>
+  </div>
+
+  <!-- CATMuS Medieval Abbreviations & Punctuation -->
+  <div class="section">
+    <h2>Abbreviation Marks & Punctuation (CATMuS Medieval)</h2>
+    <div class="grid" id="abbrs"></div>
+  </div>
+
+  <!-- Letter Pairs (Lower / Upper) -->
+  <div class="section">
+    <h2>Letter Pairs (Lower / Upper)</h2>
+    <div class="grid" id="pairs"></div>
+  </div>
+
+  <!-- Combining Letters (a-z) -->
+  <div class="section">
+    <h2>Combining Letters</h2>
+    <div class="grid" id="combining-letters"></div>
+  </div>
+
+  <!-- Superscript Letters & Numbers -->
+  <div class="section">
+    <h2>Superscript Letters & Numbers</h2>
+    <div class="grid" id="superscript-chars"></div>
+  </div>
+
+  <div id="toast">Copied!</div>
+
+  <script>
+    // =========================================================================
+    // EXACT CATMuS UNICODE CHARACTER ARRAYS WITH TOOLTIPS
+    // =========================================================================
+
+    const modifiers = [
+      { char: '\u0304', title: 'Combining Macron' },
+      { char: '\u0307', title: 'Point suscrit' },
+      { char: '\u0309', title: 'Combining Hook' },
+      { char: '\u0364', title: 'Combining e' },
+      { char: '\u0327', title: 'Combining Cedilla' },
+      { char: '\u0335', title: 'Combining Short Stroke' },
+      { char: '\u0303', title: 'Combining Tilde Horizontal', tooltip: 'Used for nasal lines (m/n) and general abbreviation lines.' }, // Sample Tooltip
+      { char: '\u033E', title: 'Combining Tilde Vertical' },
+      { char: '\u1DD2', title: 'Combining Ur', tooltip: 'Used for -ur abbreviation.' }
+    ];
+
+    const abbreviations = [
+      { char: '\uA770', title: '-us (U+A770)', tooltip: 'Abbreviation ending for -us.' },
+      { char: '\uA775', title: '-rum (U+A775)', tooltip: 'Abbreviation ending for -rum.' },
+      { char: '\uA76D', title: '-is (U+A76D)', tooltip: 'Abbreviation ending for -is.' },
+      { char: '',     title: '-et/-bus' },
+      { char: ';',      title: 'Semicolon' },
+      { char: '\uA76F', title: 'con- (U+A76F)', tooltip: 'Abbreviation prefix for con-/com-.' },
+      { char: '÷',      title: 'est', tooltip: 'Abbreviation for est.' },
+      { char: '⁊',      title: 'Tironian et', tooltip: 'Tironian note for et / &.' },
+      { char: '¬',      title: 'Line Feed / Mark' },
+      { char: '.',      title: 'Dot' },
+      { char: ':',      title: 'Colon' },
+      { char: '/',      title: 'Slash' },
+      { char: '‸',      title: 'Insertion mark' },
+      { char: '[',      title: 'Open Bracket' },
+      { char: ']',      title: 'Close Bracket' },
+      { char: '⟦',      title: 'Correction Left' },
+      { char: '⟧',      title: 'Correction Right' }
+    ];
+
+    const pairedLetters = [
+      { lower: 'ꝑ', upper: 'Ꝑ', lowerTooltip: 'per / par abbreviation', upperTooltip: 'Capital PER / PAR' },
+      { lower: 'ꝓ', upper: 'Ꝓ', lowerTooltip: 'pro abbreviation', upperTooltip: 'Capital PRO' },
+      { lower: 'p̄', upper: 'P̄' },
+      { lower: 'q̄', upper: 'Q̄' },
+      { lower: 'q̇', upper: 'Q̇' },
+      { lower: 'qͤ', upper: 'Qͤ' },
+      { lower: 'ꝗ', upper: 'Ꝙ' },
+      { lower: 'ꝙ', upper: 'Ꝙ' },
+      { lower: 'ł', upper: 'Ꝉ' },
+      { lower: 'ħ', upper: 'Ħ' },
+      { lower: 'ẜ', upper: 'S' },
+      { lower: 'ø', upper: 'Ø' }
+    ];
+
+    const combiningLetters = [
+      { char: '\u0363' }, { char: '\u1DE8' }, { char: '\u0368' }, { char: '\u0369' }, 
+      { char: '\u0364' }, { char: '\u1DEB' }, { char: '\u1DDA' }, { char: '\u036A' }, 
+      { char: '\u0365' }, { char: '\u1DDC' }, { char: '\u1DDD' }, { char: '\u036B' }, 
+      { char: '\u1DE0' }, { char: '\u0366' }, { char: '\u1DEE' }, { char: '\u036C' }, 
+      { char: '\u1DE4' }, { char: '\u036D' }, { char: '\u0367' }, { char: '\u036E' }, 
+      { char: '\u1DF1' }, { char: '\u036F' }, { char: '\u1DE6' }
+    ];
+
+    const superscripts = [
+      { char: '\u1D43' }, { char: '\u1D47' }, { char: '\u1D9C' }, { char: '\u1D48' }, 
+      { char: '\u1D49' }, { char: '\u1DA0' }, { char: '\u1D4D' }, { char: '\u02B0' }, 
+      { char: '\u2071' }, { char: '\u02B2' }, { char: '\u1D4F' }, { char: '\u02E1' }, 
+      { char: '\u1D50' }, { char: '\u207F' }, { char: '\u1D52' }, { char: '\u1D56' }, 
+      { char: '\u02B3' }, { char: '\u02E2' }, { char: '\u1D57' }, { char: '\u1D58' }, 
+      { char: '\u1D5B' }, { char: '\u02B7' }, { char: '\u02E3' }, { char: '\u02B8' }, 
+      { char: '\u1DBB' }, { char: '\u2070' }, { char: '\u00B9' }, { char: '\u00B2' }, 
+      { char: '\u00B3' }, { char: '\u2074' }, { char: '\u2075' }, { char: '\u2076' }, 
+      { char: '\u2077' }, { char: '\u2078' }, { char: '\u2079' }, { char: '\u207D' }, 
+      { char: '\u207E' }
+    ];
+
+    // =========================================================================
+    // BUILD GUIS & LISTENERS
+    // =========================================================================
+    const ta = document.getElementById('output');
+
+    function handleInput(char) {
+      if (document.getElementById('directCopy').checked) {
+        navigator.clipboard.writeText(char);
+        showToast(`Copied: ${char}`);
+        return;
+      }
+      let start = ta.selectionStart, end = ta.selectionEnd;
+      ta.value = ta.value.substring(0, start) + char + ta.value.substring(end);
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = start + char.length;
+    }
+
+    function mkBtn(char, title = '', tooltip = '') {
+      let wrapper = document.createElement('div');
+      wrapper.className = 'btn-wrapper';
+
+      let b = document.createElement('button');
+      b.innerText = char;
+      if (title) b.title = title;
+      b.onclick = () => handleInput(char);
+
+      if (tooltip) {
+        let badge = document.createElement('span');
+        badge.className = 'help-badge';
+        badge.innerText = '(?)';
+        b.appendChild(badge);
+
+        let tt = document.createElement('div');
+        tt.className = 'tooltip-text';
+        tt.innerText = tooltip;
+        wrapper.appendChild(tt);
+      }
+
+      wrapper.appendChild(b);
+      return wrapper;
+    }
+
+    // Populate Modifiers & Abbreviations
+    const modDiv = document.getElementById('mods');
+    modifiers.forEach(m => modDiv.appendChild(mkBtn(m.char, m.title, m.tooltip)));
+
+    const abbrDiv = document.getElementById('abbrs');
+    abbreviations.forEach(a => abbrDiv.appendChild(mkBtn(a.char, a.title, a.tooltip)));
+
+    // Populate Lowercase/Uppercase Pairs
+    const pairDiv = document.getElementById('pairs');
+    pairedLetters.forEach(p => {
+      let group = document.createElement('div');
+      group.className = 'pair-group';
+      group.appendChild(mkBtn(p.lower, '', p.lowerTooltip));
+      group.appendChild(mkBtn(p.upper, '', p.upperTooltip));
+      pairDiv.appendChild(group);
+    });
+
+    // Populate Combining Letters
+    const combDiv = document.getElementById('combining-letters');
+    combiningLetters.forEach(c => combDiv.appendChild(mkBtn(c.char, c.title, c.tooltip)));
+
+    // Populate Superscripts
+    const superDiv = document.getElementById('superscript-chars');
+    superscripts.forEach(s => superDiv.appendChild(mkBtn(s.char, s.title, s.tooltip)));
+
+    function showToast(msg) {
+      let t = document.getElementById('toast');
+      t.innerText = msg;
+      t.style.display = 'block';
+      setTimeout(() => t.style.display = 'none', 1500);
+    }
+  </script>
+</body>
+</html>
